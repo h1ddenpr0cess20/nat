@@ -180,6 +180,7 @@ src/
     nat/                Geometry and animation. Knows nothing about transports
       index.js            The controller, the throw, and the per-frame loop
       geometry.js         The solid, the edge ink, and twenty numbered faces
+      grab.js             The pointer: pick it up, spin it, throw it
       moods.js            Targets per conversational state
       environment.js      Cool studio env map
     session/            The call. Emits transport-agnostic events
@@ -248,7 +249,29 @@ from across the room, and nothing else in the app turns one up on purpose.
 
 Nothing here is a sine wave dressed up as motion. The hop is ballistic — real
 gravity, real bounces, each one bleeding off angular velocity — and everything
-else is a damped spring reacting to a landing. Stiff springs and heavy damping
+else is a damped spring reacting to a landing.
+
+## Picking it up
+
+Drag the die and you are holding it. It follows the cursor anywhere in frame —
+sideways, up, most of the way off an edge — and it spins as it goes, about the
+axis across its own direction of travel, so one drag across the stage turns it
+a full revolution and a bit. There is no limit on that: keep dragging and it
+keeps going round. Where it stops is where it stays; nothing pulls it back to
+the middle, and the only thing it can't do is leave the frame.
+
+Let go while it is still moving and you have thrown it. It flies, bounces,
+rolls out, and lands on a real face — the same honest roll it makes for itself,
+so `nat.result` is whatever you actually threw. Let go of it standing still and
+it just turns flat onto the nearest face. A throw that arrives from the
+conversation while you are holding it waits in your hand and resolves when you
+release. A dead API still outranks you: while it is fumbled you can move it
+about, but it comes back up 1.
+
+Dragging anywhere *other* than the die still orbits the camera, unchanged. That
+distinction is the whole point of `nat/grab.js`: OrbitControls swings the camera
+around a point that never moves, which is not the same thing as touching the
+die. Stiff springs and heavy damping
 are what make a small lump of resin read as heavy. While it talks, the shoves
 come from onsets in the audio envelope, so the squash lands on consonants and it
 looks like it is forming words.
