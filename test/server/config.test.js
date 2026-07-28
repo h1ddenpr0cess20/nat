@@ -5,9 +5,9 @@ import { KNOWN_VOICES, loadConfig } from '../../src/server/config.js';
 import { buildTools } from '../../src/server/persona.js';
 
 describe('loadConfig', () => {
-  it('defaults to orion, which is the one that suits this character', () => {
+  it('defaults to leo, and offers the whole published roster', () => {
     const config = loadConfig({});
-    assert.equal(config.defaultVoice, 'orion');
+    assert.equal(config.defaultVoice, 'leo');
     assert.deepEqual(config.voices, [...KNOWN_VOICES]);
   });
 

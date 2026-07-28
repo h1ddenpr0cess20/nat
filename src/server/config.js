@@ -9,21 +9,22 @@
 
 import { readFileSync } from 'node:fs';
 
-/* xAI publishes 26 voices — the original five plus 21 flagship ones. This is not
-   all of them. It is the subset that suits this character: low, and able
-   to carry a room.
-   The light and airy end of the roster (`ara`, `eve`,
-   `carina`, `luna`, `iris`, `celeste`, `lumen`, `lux`, `cosmo`, `sirius`,
-   `altair`, `helios`) is deliberately absent — this one does not sound
-   upbeat. `orion` leads because it is the one that sounds like it is telling you a story.
+/* Every voice xAI publishes — the original five plus 21 flagship ones.
 
-   xAI does have a voices endpoint now (`GET /v1/tts/voices`), but it returns
-   the whole roster, which is the thing we are curating away from. An
-   unrecognised XAI_VOICE is still honoured and shows up in the picker, so
-   anything omitted here is a default we don't pick, not a voice we block. */
+   An earlier cut of this list kept only the low, heavy end of the roster,
+   which in practice meant the picker offered no female voices at all. Casting
+   is the operator's call and not this file's, so the whole roster is here now
+   and the only opinion left is which one leads: `leo`, which sounds like
+   somebody telling you a story across a table — the entire job.
+
+   xAI does have a voices endpoint (`GET /v1/tts/voices`), but a static list
+   keeps the picker populated before the proxy has a key to ask with. An
+   unrecognised XAI_VOICE is honoured too, and shows up at the front. */
 export const KNOWN_VOICES = Object.freeze([
-  'orion', 'atlas', 'rex', 'sal', 'zagan', 'perseus', 'leo',
+  'leo', 'rex', 'sal', 'atlas', 'zagan', 'orion', 'perseus',
   'helix', 'zenith', 'rigel', 'castor', 'ursa', 'naksh', 'kepler',
+  'ara', 'eve', 'carina', 'luna', 'iris', 'celeste', 'lumen',
+  'lux', 'cosmo', 'sirius', 'altair', 'helios',
 ]);
 
 /* grok-voice-latest tracks the newest release. There is no models endpoint that
