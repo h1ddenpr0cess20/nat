@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>d20 — AI assistant avatar</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c0b0d; }
+  three-d-stage:not(:defined) { visibility: hidden; }
+  three-d-stage { display: block; width: 100vw; height: 100vh; }
+  #state {
+    position: fixed; left: 24px; bottom: 22px; z-index: 5;
+    display: flex; gap: 8px; font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  #state button {
+    appearance: none; white-space: nowrap; cursor: pointer; padding: 9px 14px; border-radius: 4px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.55); font: inherit; transition: color .18s, background .18s, border-color .18s;
+  }
+  #state button:hover { color: rgba(255,255,255,.9); background: rgba(255,255,255,.1); }
+  #state button[aria-pressed="true"] { color: #14111a; background: #ded5ea; border-color: #ded5ea; }
+  #note {
+    position: fixed; right: 26px; bottom: 24px; z-index: 5; max-width: 320px; text-align: right;
+    font: 500 13px/1.45 ui-monospace, "SF Mono", Menlo, monospace; color: rgba(222,213,234,.42);
+  }
+</style>
+</head>
+<body>
+<three-d-stage name="d20" background="#0c0b0d"></three-d-stage>
+<div id="state">
+  <button data-mode="idle" aria-pressed="true">idle</button>
+  <button data-mode="listening" aria-pressed="false">listening</button>
+  <button data-mode="thinking" aria-pressed="false">thinking</button>
+  <button data-mode="rolling" aria-pressed="false">roll it</button>
+  <button data-mode="talking" aria-pressed="false">talking</button>
+</div>
+<div id="note">…</div>
+<script src="./three-d-stage.js"></script>
+<script type="module">
+const stage = document.querySelector('three-d-stage');
+const { THREE } = await stage.ready;
+
+/* cool studio env — resin wants a crisp highlight and a soft fill */
+try {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 32;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 32);
+  g.addColorStop(0, '#eef0fb'); g.addColorStop(0.48, '#7f8496');
+  g.addColorStop(0.55, '#302c36'); g.addColorStop(1, '#100e13');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath(); ctx.ellipse(17, 6, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(150,170,225,0.5)';
+  ctx.beginPath(); ctx.ellipse(47, 12, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.Texture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  const pmrem = new THREE.PMREMGenerator(stage._renderer);
+  stage._scene.environment = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose(); tex.dispose();
+} catch (e) {}
+
+const d20 = new THREE.Group(); d20.name = 'd20_character';
+const body = new THREE.Group(); body.name = 'body';
+d20.add(body);
+
+/* ---------- die body: icosahedron with softened edges ---------- */
+const dieGeo = new THREE.IcosahedronGeometry(1, 0);
+dieGeo.computeVertexNormals();
+
+const dieMat = new THREE.MeshPhysicalMaterial({
+  name: 'resin',
+  color: new THREE.Color('#3a3350'),
+  roughness: 0.28,
+  metalness: 0.0,
+  clearcoat: 0.9,
+  clearcoatRoughness: 0.14,
+  flatShading: true,
+});
+const die = new THREE.Mesh(dieGeo, dieMat);
+die.name = 'die';
+body.add(die);
+
+/* crisp inked edges so the silhouette reads at any angle */
+const edges = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.004, 0), 1),
+  new THREE.LineBasicMaterial({ color: new THREE.Color('#8d80b8'), transparent: true, opacity: 0.55 }));
+edges.name = 'edge_ink';
+body.add(edges);
+
+/* ---------- face centroids, and numbers laid into each face ---------- */
+const faces = [];
+{
+  const p = dieGeo.attributes.position;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c2 = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c2.fromBufferAttribute(p, i + 2);
+    const centroid = new THREE.Vector3().add(a).add(b).add(c2).divideScalar(3);
+    faces.push({
+      centroid,
+      normal: centroid.clone().normalize(),
+      verts: [a.clone(), b.clone(), c2.clone()],
+    });
+  }
+}
+
+/* real dice pair opposite faces to sum to 21 */
+const numbers = new Array(faces.length).fill(0);
+{
+  let next = 1;
+  for (let i = 0; i < faces.length; i++) {
+    if (numbers[i]) continue;
+    let opp = -1, best = 1;
+    for (let j = 0; j < faces.length; j++) {
+      const d = faces[i].normal.dot(faces[j].normal);
+      if (d < best) { best = d; opp = j; }
+    }
+    numbers[i] = next;
+    numbers[opp] = 21 - next;
+    next++;
+  }
+}
+
+const glyphTex = (n) => {
+  const s = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, s, s);
+  g.fillStyle = n === 20 ? '#ffd479' : '#e7e0f7';
+  g.font = `600 ${n === 20 ? 120 : 132}px ui-monospace, "SF Mono", Menlo, monospace`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(String(n), s / 2, s / 2 + 6);
+  /* 6 and 9 get an underline, same as a real die */
+  if (n === 6 || n === 9) {
+    g.fillRect(s / 2 - 44, s / 2 + 76, 88, 11);
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+
+const glyphGeo = new THREE.PlaneGeometry(0.62, 0.62);
+const UP_Y = new THREE.Vector3(0, 1, 0);
+faces.forEach((f, i) => {
+  const mat = new THREE.MeshBasicMaterial({
+    map: glyphTex(numbers[i]),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  mat.name = 'glyph_' + numbers[i];
+  const q = new THREE.Mesh(glyphGeo, mat);
+  q.name = 'face_' + numbers[i];
+  q.position.copy(f.centroid).multiplyScalar(1.006);
+  /* orient every glyph against one global reference — an equilateral face gives no
+     non-arbitrary "apex", so a per-vertex choice is 3-fold ambiguous */
+  const ref = Math.abs(f.normal.y) > 0.98 ? new THREE.Vector3(0, 0, 1) : UP_Y;
+  const upDir = ref.clone().projectOnPlane(f.normal).normalize();
+  const right = new THREE.Vector3().crossVectors(upDir, f.normal).normalize();
+  q.quaternion.setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(right, upDir, f.normal));
+  body.add(q);
+  f.mesh = q;
+});
+
+/* ---------- moods ---------- */
+const MOODS = {
+  idle:      { jitter: 0.06, lean: 0.0,   rock: 0.05, rockSpeed: 1.0, tumble: 0,    spinIdle: 0.10 },
+  listening: { jitter: 0.03, lean: -0.13, rock: 0.11, rockSpeed: 1.6, tumble: 0,    spinIdle: 0.04 },
+  thinking:  { jitter: 0.12, lean: 0.08,  rock: 0.02, rockSpeed: 1.0, tumble: 0.55, spinIdle: 0 },
+  rolling:   { jitter: 0.20, lean: 0.10,  rock: 0.02, rockSpeed: 1.0, tumble: 1,    spinIdle: 0 },
+  talking:   { jitter: 0.16, lean: 0.04,  rock: 0.04, rockSpeed: 1.5, tumble: 0.22, spinIdle: 0.06 },
+};
+const LINES = {
+  idle: '…',
+  listening: 'go on.',
+  thinking: 'weighing the odds…',
+  rolling: 'rolling.',
+  talking: 'here\u2019s what I\u2019ve got.',
+};
+let target = MOODS.idle, m = { ...MOODS.idle };
+const note = document.getElementById('note');
+document.querySelectorAll('#state button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#state button').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    target = MOODS[btn.dataset.mode];
+    note.textContent = LINES[btn.dataset.mode];
+    if (target === MOODS.rolling) throwDie();
+  });
+});
+
+/* ---------- motion rig (same springs as the boulder) ---------- */
+const clock = new THREE.Clock();
+let t = 0;
+const sq = { p: 0, v: 0 }, tz = { p: 0, v: 0 }, tx = { p: 0, v: 0 };
+const spring = (s, k, c, dt, to = 0) => {
+  s.v += (to - s.p) * k * dt - s.v * c * dt;
+  s.p += s.v * dt;
+};
+
+let y = 0, yV = 0, airborne = false;
+let x = 0, z = 0, hd = 0.7;
+let evtT = 2.2, sylT = 0;
+let settleQ = null, settling = 0, result = 0;
+
+/* free tumbling: an angular velocity that gets bled off by each bounce */
+const spinAxis = new THREE.Vector3(0.4, 1, 0.2).normalize();
+let spinRate = 0;
+const dq = new THREE.Quaternion();
+
+const land = (force) => {
+  sq.v += force;
+  tz.v += (Math.random() - 0.5) * force * 0.7;
+  tx.v += (Math.random() - 0.5) * force * 0.45;
+};
+
+/* pick the face that ends up on top, and rotate it there — the die always reads a number */
+function chooseResult() {
+  const worldUp = UP_Y;
+  let best = -2, bi = 0;
+  for (let i = 0; i < faces.length; i++) {
+    const d = faces[i].normal.clone().applyQuaternion(body.quaternion).dot(worldUp);
+    if (d > best) { best = d; bi = i; }
+  }
+  result = numbers[bi];
+  /* snap that face flat to the top */
+  const cur = faces[bi].normal.clone().applyQuaternion(body.quaternion);
+  const fix = new THREE.Quaternion().setFromUnitVectors(cur, worldUp);
+  settleQ = fix.multiply(body.quaternion);
+  settling = 1;
+  note.textContent = result === 20 ? 'natural 20.' : result === 1 ? 'a one. of course.' : 'you rolled ' + result + '.';
+}
+
+function throwDie() {
+  spinAxis.set(Math.random() - 0.5, Math.random() * 0.6 + 0.4, Math.random() - 0.5).normalize();
+  spinRate = 15 + Math.random() * 9;
+  yV = 2.4 + Math.random() * 0.6;
+  airborne = true;
+  settleQ = null; settling = 0;
+  sq.v -= 2.4;
+  hd = Math.random() * Math.PI * 2;
+}
+
+die.onBeforeRender = () => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  t += dt;
+  for (const k in m) m[k] += (target[k] - m[k]) * Math.min(1, dt * 3.4);
+  const rolling = target === MOODS.rolling;
+
+  /* ---- ballistic hop + hard landings, exactly like the rock's stomp ---- */
+  if (airborne) {
+    yV -= 13 * dt; y += yV * dt;
+    if (y <= 0) {
+      y = 0;
+      if (Math.abs(yV) > 0.9) {          /* still enough energy to bounce */
+        yV = -yV * 0.42;
+        land(4.5 + Math.abs(yV));
+        spinRate *= 0.55;
+        x += Math.cos(hd) * 0.16; z += Math.sin(hd) * 0.16;
+      } else {
+        airborne = false; yV = 0;
+        land(5.5);
+        if (rolling) chooseResult();
+      }
+    }
+  } else {
+    y += (0 - y) * Math.min(1, dt * 8);
+    x += (0 - x) * Math.min(1, dt * 1.4);
+    z += (0 - z) * Math.min(1, dt * 1.4);
+  }
+
+  /* ---- tumble, then settle onto the winning face ---- */
+  if (settling > 0 && settleQ) {
+    body.quaternion.slerp(settleQ, Math.min(1, dt * 7));
+    settling = Math.max(0, settling - dt * 0.8);
+    spinRate = 0;
+  } else {
+    /* thinking/talking keep a lazy tumble going without a throw */
+    const idleTumble = rolling ? 0 : m.tumble * 2.6;
+    const rate = spinRate + idleTumble;
+    if (rate > 0.001) {
+      dq.setFromAxisAngle(spinAxis, rate * dt);
+      body.quaternion.premultiply(dq);
+    }
+    spinRate = Math.max(0, spinRate - dt * (airborne ? 1.2 : 9));
+    /* a slow drift on the vertical, so a resting die still feels alive */
+    if (m.spinIdle > 0.001) {
+      dq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), m.spinIdle * dt);
+      body.quaternion.premultiply(dq);
+    }
+  }
+
+  /* ---- idle fidgets: nudges and the occasional impatient hop ---- */
+  if (!airborne && !rolling) {
+    evtT -= dt;
+    if (evtT <= 0) {
+      const r = Math.random();
+      if (r < 0.4) sq.v += 1.8;
+      else if (r < 0.7) { tz.v += (Math.random() - 0.5) * 4; tx.v += 1.2; }
+      else { yV = 1.1 + Math.random() * 0.5; airborne = true; spinRate = 3.5; sq.v -= 1.6; }
+      evtT = 2.8 + Math.random() * 4.5;
+    }
+  }
+
+  if (target === MOODS.talking) {
+    sylT -= dt;
+    if (sylT <= 0) {
+      sq.v += 1.2 + Math.random();
+      tz.v += (Math.random() - 0.5) * 1.8;
+      sylT = 0.13 + Math.random() * 0.16;
+    }
+  }
+
+  spring(sq, 185, 11, dt);
+  const rockAmt = Math.sin(t * m.rockSpeed * 2.0) * m.rock;
+  spring(tz, 68, 6.2, dt, rockAmt);
+  spring(tx, 68, 6.2, dt, m.lean * 0.2);
+
+  const tremor = m.jitter * 0.014;
+  const breathe = Math.sin(t * 1.3) * 0.007;
+
+  d20.position.set(
+    x + (Math.random() - 0.5) * tremor,
+    y + breathe * 0.5 + Math.abs(rockAmt) * 0.34,
+    z + (Math.random() - 0.5) * tremor);
+  d20.rotation.set(
+    tx.p + (Math.random() - 0.5) * tremor,
+    0,
+    tz.p + (Math.random() - 0.5) * tremor * 1.3);
+
+  const s = sq.p * 0.075 + breathe;
+  body.scale.set(1 + s * 0.45, 1 - s * 0.8, 1 + s * 0.45);
+
+  /* the 20 face brightens as it comes up */
+  for (let i = 0; i < faces.length; i++) {
+    if (numbers[i] !== 20) continue;
+    const d = faces[i].normal.clone().applyQuaternion(body.quaternion).dot(UP_Y);
+    const lit = Math.max(0, d);
+    faces[i].mesh.material.color.setRGB(1, 1 - lit * 0.06, 1 - lit * 0.28)
+      .multiplyScalar(1 + lit * 1.9);
+    faces[i].mesh.scale.setScalar(1 + lit * 0.1);
+  }
+};
+
+stage.setObject(d20);
+stage._camera.position.multiplyScalar(1.35);
+stage._controls.update();
+stage._ground.visible = false;
+stage._key.castShadow = false;
+d20.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+</script>
+</body>
+</html>
