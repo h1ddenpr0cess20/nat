@@ -22,6 +22,13 @@
  * rather than picked first and animated to. `nat.result` is therefore a real
  * roll, and the number the player can see is the number that came up.
  *
+ * You can also just pick it up. Drag the die and it goes where the cursor goes,
+ * anywhere in frame, rolling as it travels — the rotation is the travel, so it
+ * turns as far as you push it and there is nothing to stop it going round and
+ * round. Let go while it is moving and you have thrown it: it flies, bounces,
+ * rolls out and lands on a real number, the same as one of its own throws.
+ * Where it stops is where it stays. Nothing pulls it back to the middle.
+ *
  * Two things are not conversational states. Being cut off is a hop. An API
  * failure holds `fumbled` — the 1 face turned up, the resin gone dead, no
  * fidget and no drift — until something works again. That is the one mood not
@@ -30,6 +37,7 @@
 
 import { buildEnvironment } from './environment.js';
 import { createDie } from './geometry.js';
+import { createGrab } from './grab.js';
 import { ENERGY_GAIN, MOODS } from './moods.js';
 
 /** One step of a damped spring toward `to`. */
@@ -53,7 +61,7 @@ const DEAD = '#241f2c';
 export function createNat({ stage, THREE }) {
   buildEnvironment({ stage, THREE });
 
-  const { group, body, dieMat, edges, faces } = createDie(THREE);
+  const { group, body, die, dieMat, edges, faces } = createDie(THREE);
 
   let state = 'idle';
   let broken = false;
@@ -79,8 +87,14 @@ export function createNat({ stage, THREE }) {
   let x = 0, z = 0, heading = 0.7;
   let evtT = 2.2;
 
+  /* Lateral velocity. Its own throws go straight up, so this is empty unless a
+     hand has put something in it — dragged, or let go of while moving. */
+  let vx = 0, vz = 0;
+
   /* Free tumbling: an angular velocity bled off by each bounce. */
   const spinAxis = new THREE.Vector3(0.4, 1, 0.2).normalize();
+  const rollAxis = new THREE.Vector3();
+  const here = new THREE.Vector3();
   const dq = new THREE.Quaternion();
   const upY = new THREE.Vector3(0, 1, 0);
   let spinRate = 0;
@@ -124,7 +138,13 @@ export function createNat({ stage, THREE }) {
     result = number;
   };
 
+  /* Assigned once the stage is up, below. Nothing calls into it before that. */
+  let hand = null;
+
   const throwDie = () => {
+    /* Held? Then the throw is yours to make. It is still a roll — `thrown`
+       carries, and it resolves onto a number the moment you let go. */
+    if (hand?.held) { thrown = true; return; }
     spinAxis.set(Math.random() - 0.5, Math.random() * 0.6 + 0.4, Math.random() - 0.5).normalize();
     spinRate = 15 + Math.random() * 9;
     yV = 2.4 + Math.random() * 0.6;
@@ -138,6 +158,7 @@ export function createNat({ stage, THREE }) {
   const frame = () => {
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
+    const held = Boolean(hand?.held);
 
     /* --- energy ----------------------------------------------------------- */
     impulse = Math.max(0, impulse - impulse * Math.min(1, dt * 3.4) - dt * 0.05);
@@ -148,7 +169,7 @@ export function createNat({ stage, THREE }) {
     /* --- mood --------------------------------------------------------------
        Mid-throw the roll owns the mood, whatever the conversation is doing; a
        broken API owns it outright. Everything is eased into, so nothing snaps. */
-    const throwing = airborne || settling > 0;
+    const throwing = airborne || thrown || settling > 0;
     const mood = broken ? FUMBLED : (throwing ? MOODS.rolling : (MOODS[state] ?? MOODS.idle));
     for (const k in target) {
       target[k] = mood[k];
@@ -157,8 +178,12 @@ export function createNat({ stage, THREE }) {
 
     const gain = ENERGY_GAIN;
 
-    /* --- ballistic hop, and hard landings ---------------------------------- */
-    if (airborne) {
+    /* --- ballistic hop, and hard landings ----------------------------------
+       Held, the pointer owns where it is and none of this runs — it is in your
+       hand, not in the air. */
+    if (held) {
+      // your problem now
+    } else if (airborne) {
       yV -= 13 * dt; y += yV * dt;
       if (y <= 0) {
         y = 0;
@@ -170,14 +195,33 @@ export function createNat({ stage, THREE }) {
         } else {
           airborne = false; yV = 0;
           land(5.5);
-          if (thrown) { thrown = false; chooseResult(); }
         }
       }
     } else {
       y += (0 - y) * Math.min(1, dt * 8);
-      x += (0 - x) * Math.min(1, dt * 1.4);
-      z += (0 - z) * Math.min(1, dt * 1.4);
     }
+
+    /* --- where it ended up ---------------------------------------------------
+       Nothing hauls it back to the middle: a die you put down stays put, and a
+       die you threw stops where it stopped. The only limit is the edge of the
+       frame, and running into that takes the speed out of it. */
+    if (!held) {
+      x += vx * dt; z += vz * dt;
+      const friction = Math.min(1, dt * (airborne ? 0.5 : 3.0));
+      vx -= vx * friction; vz -= vz * friction;
+
+      here.set(x, y, z);
+      if (hand?.contain(here)) {
+        x = here.x; z = here.z;
+        if (airborne) y = Math.max(0, here.y);
+        vx *= 0.4; vz *= 0.4;
+      }
+    }
+
+    /* The roll is over when it has stopped travelling, not when it stops
+       bouncing — a thrown die that is still rolling has not landed yet. */
+    const travel = Math.hypot(vx, vz);
+    if (thrown && !held && !airborne && travel < 0.12) { thrown = false; chooseResult(); }
 
     /* --- tumble, then settle onto the face that won ------------------------- */
     if (settling > 0 && settleQ) {
@@ -185,6 +229,21 @@ export function createNat({ stage, THREE }) {
       settling = Math.max(0, settling - dt * 0.8);
       spinRate = 0;
     } else {
+      /* Moving along the table — dragged or rolling out — and the rotation is
+         the travel: it turns about the axis across its own direction, at the
+         rate its size implies. Push it far enough and it goes round; there is
+         no limit on it, because there is no limit on rolling a die. */
+      if ((held || !airborne) && travel > 0.02) {
+        rollAxis.set(-vz, 0, vx).normalize();
+        spinAxis.lerp(rollAxis, Math.min(1, dt * 6));
+        if (spinAxis.lengthSq() < 1e-6) spinAxis.copy(rollAxis);
+        spinAxis.normalize();
+        /* Loose in your hand it is not rolling on anything, so it turns faster
+           than the ground would take it round — one drag across the stage is a
+           turn and a bit, which is what "spin it round" has to mean. Let go and
+           it is back to what the distance says. */
+        spinRate = Math.max(spinRate, travel / (held ? 0.33 : 0.8));
+      }
       // thinking and speaking keep a lazy tumble going with no throw behind it
       const rate = spinRate + m.tumble * 2.6;
       if (rate > 0.001) {
@@ -199,7 +258,7 @@ export function createNat({ stage, THREE }) {
     }
 
     /* --- idle: nudges, and the occasional impatient hop --------------------- */
-    if (!airborne && !throwing && !broken) {
+    if (!airborne && !throwing && !broken && !held) {
       evtT -= dt;
       if (evtT <= 0) {
         const r = Math.random();
@@ -303,6 +362,43 @@ export function createNat({ stage, THREE }) {
   reframe();
   new ResizeObserver(reframe).observe(stage);
 
+  /* --- the pointer ----------------------------------------------------------
+     Picking it up cancels whatever it was doing: mid-roll, mid-settle, mid-hop,
+     it is in your hand now. Velocity is measured off the pointer rather than
+     applied to it — that is what rolls it under your hand as you drag, and what
+     it leaves with when you let go. */
+  const CARRY = 5;             // the fastest flick it will believe, per second
+
+  hand = createGrab({
+    stage, THREE, mesh: die,
+    at: () => here.set(x, y, z),
+
+    onGrab() {
+      settleQ = null; settling = 0;
+      thrown = false;
+      airborne = false; yV = 0;
+      vx = 0; vz = 0;
+      evtT = 2.8;              // it does not fidget while it is being held
+    },
+
+    onDrag(p, dt) {
+      const clamp = (v) => Math.max(-CARRY, Math.min(CARRY, v));
+      vx += (clamp((p.x - x) / dt) - vx) * 0.35;
+      vz += (clamp((p.z - z) / dt) - vz) * 0.35;
+      yV = clamp((p.y - y) / dt);
+      x = p.x; z = p.z; y = Math.max(0, p.y);
+    },
+
+    onDrop() {
+      if (broken) { vx = vz = yV = 0; turnUp(1); return; }   // it is not yours to roll
+      /* However it left your hand, it lands on a number. Lifted or flicked
+         upward it flies first; set down gently it just rolls to a stop. */
+      thrown = true;
+      if (y > 0.02 || yV > 0.4) airborne = true;
+      spinRate = Math.max(spinRate, Math.hypot(vx, vz) * 2.2 + Math.max(0, yV) * 1.5);
+    },
+  });
+
   /* setObject() turns shadows on for everything it traverses. There is no
      table here — the die hangs in the void — so nothing has anything to cast
      onto, and the shadow pass is wasted work. */
@@ -362,7 +458,7 @@ export function createNat({ stage, THREE }) {
     /** Talk over it and it jumps — an impatient hop, harder than the idle one,
      *  and not a roll: whatever it was showing it keeps. */
     jolt(weight = 1) {
-      if (broken || airborne) return;
+      if (broken || airborne || hand?.held) return;   // it can't jump out of your hand
       yV = 1.3 + Math.random() * 0.6 * weight;
       airborne = true;
       spinRate = 4.5 * weight;
@@ -379,7 +475,9 @@ export function createNat({ stage, THREE }) {
       if (broken) {
         sustain = 0;
         airborne = false;
+        thrown = false;      // whatever was in the air, this outranks it
         yV = 0;
+        vx = vz = 0;
         turnUp(1);   // it comes up 1, which is the only honest thing to show
       }
     },
