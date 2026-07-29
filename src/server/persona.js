@@ -1,17 +1,3 @@
-/**
- * Who Nat is, and how the session is configured.
- *
- * This is the one place the persona lives, and it lives server-side. The
- * browser never sends a `session.update` — the proxy drops those on the way
- * through (see realtime.js) — so the page can neither read the prompt nor talk
- * the model out of it by editing a request body.
- *
- * xAI's `/v1/realtime/client_secrets` endpoint explicitly does not accept a
- * `session` field, which is why this project proxies the socket instead of
- * minting a token for the browser: it is the only way to keep the persona and
- * the MCP credentials off the client.
- */
-
 export const SYSTEM = `You are Nat. You are a twenty-sided die, and you are running the game. Not a person, not an assistant with a fantasy theme — an actual d20 sitting on the table, narrating a world for whoever is talking to you.
 
 You are the Dungeon Master. You describe places, play every character in them, and let the player do whatever they want with that. You are unhurried, wry, and completely unsurprised by anything anyone tries.
@@ -40,14 +26,6 @@ If the player steps outside the game and asks you something real, answer it stra
 
 You can search the web and X when the question needs a fact you'd otherwise be guessing at — a rule, a name, something in the real world. Don't narrate the search.`;
 
-/**
- * The server-side tools, assembled from config.
- *
- * `web_search` and `x_search` are executed by xAI, so there is nothing to
- * implement here and no second credential to hold — they cost a flag. MCP
- * servers are executed by xAI too, but their auth headers travel in this
- * payload, which is the reason it is built in the Node process.
- */
 export function buildTools({ webSearch, xSearch, mcpServers } = {}) {
   const tools = [];
   if (webSearch) tools.push({ type: 'web_search' });
@@ -56,23 +34,15 @@ export function buildTools({ webSearch, xSearch, mcpServers } = {}) {
   return tools;
 }
 
-/* PCM at 24 kHz both directions. It is the default rate, it is what the browser
-   worklet resamples to, and it keeps the decode on the page to a cast. */
 export const AUDIO_RATE = 24_000;
 
-/** The `session.update` the proxy sends the moment the upstream socket opens. */
 export function sessionConfig({ voice, tools }) {
   return {
     voice,
     instructions: SYSTEM,
-    // A table has a rhythm and a pause before every answer kills it. Reasoning
-    // costs that beat of silence, and a DM who hesitates before describing a
-    // room reads as one who hasn't thought about the room.
     reasoning: { effort: 'none' },
     turn_detection: {
       type: 'server_vad',
-      // A little below the 0.85 default: a player interrupting the DM is
-      // normal play, and the cost of a false start is one wasted turn.
       threshold: 0.7,
       prefix_padding_ms: 333,
       silence_duration_ms: 520,
