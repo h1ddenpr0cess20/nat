@@ -6,10 +6,15 @@ uncertain. It runs on an xAI Grok speech-to-speech session, and the tumble, hop
 and squash are driven by the live audio, so it moves with whichever of you is
 talking.
 
-The rolls are real. The die tumbles freely, whatever lands nearest the ceiling
-is the result, and it is turned flat to the top rather than picked first and
-animated to. The number you can see is the number that came up — which is why
-the persona is told never to say one out loud.
+The rolls are real, and they are for you rather than for it. The die tumbles
+freely, whatever lands nearest the ceiling is the result, and it is turned flat
+to the top rather than picked first and animated to — so the number you can see
+is the number that came up.
+
+The model never learns that number. Nothing reads the settled face back to it,
+which is why the persona is told never to state one: it narrates around a roll
+you are reading yourself. Handing the result to the model is
+[not implemented](docs/design.md#natresult-has-no-consumer-yet).
 
 It can search the web and X, and call remote MCP servers. It also remembers
 what you tell it to, between calls.
