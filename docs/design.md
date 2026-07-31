@@ -228,3 +228,18 @@ nat.fumble(true)          // the API is unreachable — or, with false, it's bac
 
 Swapping providers means writing a different `createVoiceSession()` with that
 surface. `main.js` and Nat don't change.
+
+### `nat.result` has no consumer yet
+
+The roll itself is real — `throwDie()` runs on entering `thinking`, the tumble
+is ballistic, and `result` is read off whichever face landed nearest the
+ceiling. But nothing reads `nat.result` back: it isn't sent upstream, and it
+isn't shown anywhere in the HUD. The number exists only on the die, for the
+player to look at.
+
+That's why the persona is told never to state a number — it genuinely has none
+to state. Handing the result to the model, so it can react to what was actually
+rolled instead of narrating around it, is the obvious next feature and is **not
+implemented**. It would mean sending the settled face up as a tool result or a
+proxy-authored frame, and deciding what happens to a throw the player made by
+hand rather than one the conversation asked for.
