@@ -27,10 +27,13 @@ Two things are dropped as persona overrides — a `session.update` from the
 browser, and the `instructions` field on a `response.create`.
 `test/server/realtime.test.js` covers that.
 
-One frame type never reaches xAI: `session.memory`, which the page sends with
-what it has stored. The proxy folds those lines into the instructions and
-re-sends its own `session.update`, so the persona stays here and the memories
-stay in the browser.
+Two frame types never reach xAI. `session.memory` carries what the page has
+stored; the proxy folds those lines into the instructions and re-sends its own
+`session.update`, so the persona stays here and the memories stay in the
+browser. `session.tools` names the tools the page has switched off, and the
+proxy re-declares the session without them — a subtraction only, checked against
+the tools this server actually has, so a page can narrow what the model may
+reach for and can never widen it.
 
 ## Audio
 
@@ -57,7 +60,10 @@ Safari and under any CSP that disallows `data:`.
 ## Storage
 
 The log is one record per call under `nat.history.v1`; memory is a list of lines
-under `nat.memory.v1`. Neither is uploaded — the proxy holds no copy of either.
+under `nat.memory.v1`. Neither is uploaded — the proxy holds no copy of either. The tool switches are a third,
+`nat.tools.v1`, holding the names that are switched *off* — so a tool nobody
+has touched is on, and one the server gains later arrives on rather than
+quietly missing.
 
 The last 40 conversations are kept, and the oldest are shed to stay inside a
 300 KB budget, since that space belongs to the whole origin. Private-mode Safari
@@ -161,6 +167,7 @@ src/
     styles.css          The HUD around the die
     api.js              /api/config, as a function
     history.js          Past conversations in localStorage, and picking one up
+    tools.js            Which of the server's tools this browser switched off
     memory.js           What it remembers between calls, in localStorage
     nat/                Geometry and animation. Knows nothing about transports
       index.js            The controller, the throw, and the per-frame loop
@@ -182,6 +189,7 @@ src/
       hud.js              Status chip, transcript, caption, tool label
       history.js          The log panel behind `log`, and its `continue`
       memory.js           The memory panel behind the `memory` button
+      tools.js            The tool switches behind the `tools` button
       controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
       stage.js            Strips the starter component's own chrome
@@ -192,6 +200,7 @@ src/
     app.js              Middleware chain + the upgrade handler
     api.js              /api/config
     realtime.js         The socket proxy, and the allowlist
+    tools.js            What the page may switch off, and what that leaves
     persona.js          Who Nat is, and the session config
     config.js           The environment, resolved once
     static.js           Hosting for dist/ — production only
@@ -214,9 +223,9 @@ vertical framing doesn't do.
 
 ## The transport seam
 
-`session/index.js` exposes `on`, `start`, `stop`, `send`, `cancel`, `syncMemory`,
-`messages`, `context`, `connected`, `busy`, `stale`, `state`, `muted`, `model`,
-`voice` — and emits:
+`session/index.js` exposes `on`, `start`, `stop`, `send`, `cancel`,
+`syncMemory`, `syncTools`, `messages`, `context`, `connected`, `busy`, `stale`,
+`state`, `muted`, `model`, `voice` — and emits:
 
 ```
 'state'        listening | thinking | speaking | idle
