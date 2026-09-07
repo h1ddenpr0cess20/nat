@@ -46,6 +46,9 @@ back on. It also switches itself off after a minute of silence, and the call
 survives that too. Holding the mic down is the hang-up — a ring closes around it
 while you hold, and the call ends when it lands.
 
+`menu`, in the top corner, is where the panels live: `tools`, `memory` and the
+log, one row each. Picking a row closes the menu behind it.
+
 `tools` has a switch for each tool it can reach for — web search, X search, and
 any MCP server the environment gave it. Switching one off takes it out of the
 call already in progress, and it stays off in that browser until you switch it
