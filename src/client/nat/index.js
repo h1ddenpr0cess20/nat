@@ -16,10 +16,10 @@ const MARGIN = 1.3;
 const RESIN = '#3a3350';
 const DEAD = '#241f2c';
 
-export function createNat({ stage, THREE }) {
-  buildEnvironment({ stage, THREE });
+export function createNat({ stage, GFX }) {
+  buildEnvironment({ stage, GFX });
 
-  const { group, body, die, dieMat, edges, faces } = createDie(THREE);
+  const { group, body, die, dieMat, edges, faces } = createDie(GFX);
 
   let state = 'idle';
   let broken = false;
@@ -31,7 +31,7 @@ export function createNat({ stage, THREE }) {
   let energy = 0;
   let lastEnergy = 0;
 
-  const clock = new THREE.Clock();
+  const clock = new GFX.Clock();
   let t = 0;
 
   const sq = { p: 0, v: 0 };
@@ -44,20 +44,20 @@ export function createNat({ stage, THREE }) {
 
   let vx = 0, vz = 0;
 
-  const spinAxis = new THREE.Vector3(0.4, 1, 0.2).normalize();
-  const rollAxis = new THREE.Vector3();
-  const here = new THREE.Vector3();
-  const dq = new THREE.Quaternion();
-  const upY = new THREE.Vector3(0, 1, 0);
+  const spinAxis = new GFX.Vector3(0.4, 1, 0.2).normalize();
+  const rollAxis = new GFX.Vector3();
+  const here = new GFX.Vector3();
+  const dq = new GFX.Quaternion();
+  const upY = new GFX.Vector3(0, 1, 0);
   let spinRate = 0;
   let settleQ = null, settling = 0;
   let thrown = false;
   let result = 0;
   let dead = 0;
 
-  const resin = new THREE.Color(RESIN);
-  const deadResin = new THREE.Color(DEAD);
-  const fumbleInk = new THREE.Color('#ff7a5c');
+  const resin = new GFX.Color(RESIN);
+  const deadResin = new GFX.Color(DEAD);
+  const fumbleInk = new GFX.Color('#ff7a5c');
 
   const land = (force) => {
     sq.v += force;
@@ -73,7 +73,7 @@ export function createNat({ stage, THREE }) {
     }
     result = faces[bi].number;
     const cur = faces[bi].normal.clone().applyQuaternion(body.quaternion);
-    settleQ = new THREE.Quaternion().setFromUnitVectors(cur, upY).multiply(body.quaternion);
+    settleQ = new GFX.Quaternion().setFromUnitVectors(cur, upY).multiply(body.quaternion);
     settling = 1;
   };
 
@@ -81,7 +81,7 @@ export function createNat({ stage, THREE }) {
     const f = faces.find((face) => face.number === number);
     if (!f) return;
     const cur = f.normal.clone().applyQuaternion(body.quaternion);
-    settleQ = new THREE.Quaternion().setFromUnitVectors(cur, upY).multiply(body.quaternion);
+    settleQ = new GFX.Quaternion().setFromUnitVectors(cur, upY).multiply(body.quaternion);
     settling = 1;
     spinRate = 0;
     result = number;
@@ -239,7 +239,7 @@ export function createNat({ stage, THREE }) {
 
   stage.setObject(group);
 
-  let dir = new THREE.Vector3(0.85, 0.55, 1.2).normalize();
+  let dir = new GFX.Vector3(0.85, 0.55, 1.2).normalize();
   stage._controls.addEventListener('start', () => { dir = null; });
 
   stage._controls.target.set(0, FRAME.y, 0);
@@ -270,7 +270,7 @@ export function createNat({ stage, THREE }) {
   const CARRY = 5;
 
   hand = createGrab({
-    stage, THREE, mesh: die,
+    stage, GFX, mesh: die,
     at: () => here.set(x, y, z),
 
     onGrab() {
