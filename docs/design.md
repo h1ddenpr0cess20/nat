@@ -193,9 +193,8 @@ src/
       tools.js            The tool switches behind `tools` in the menu
       controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
-      stage.js            Strips the starter component's own chrome
     vendor/
-      three-d-stage.js    Starter component (renderer, lighting, camera, controls)
+      gfx/                The 3D engine: <three-d-stage>, WebGPU, else WebGL 2
   server/
     index.js            Entry point
     app.js              Middleware chain + the upgrade handler
@@ -213,14 +212,21 @@ test/                   node:test, against a stub xAI socket
 `src/client/nat/` is the single-file prototype at `prototype/d20-buddy.html`
 split into modules, with its numbers kept verbatim — the moods, the springs, the
 ballistics and the settle are unchanged. What the app adds is who chooses the
-mood, plus the `fumbled` mood. `src/client/vendor/three-d-stage.js` is a copied
-starter component with two local changes, listed at the top of the file —
-re-copying it drops them.
+mood, plus the `fumbled` mood.
+
+`src/client/vendor/gfx/` is the 3D engine, written for these characters rather
+than pulled in: `<three-d-stage>` (studio lighting, ground shadow, orbit
+controls, framing, resize), the scene API the rig is built from — handed over as
+`GFX` — and the same shading in WGSL for WebGPU and GLSL for WebGL 2. WebGPU is
+tried first, WebGL 2 takes over where it is missing or its device is lost, and
+`?renderer=webgl` pins the fallback. The scene was first written against
+three.js r186, and the engine follows its maths closely enough to draw the same
+picture; `vendor/gfx/LICENSE` says which parts are ported.
 
 The camera is the other thing the split changed. The framing is measured against
 everything the die can do, hop included, rather than where it happens to be
-sitting, and it refits on resize — which the starter component's one-shot
-vertical framing doesn't do.
+sitting, and it refits on resize — which the stage's own one-shot framing
+doesn't do.
 
 ## The transport seam
 

@@ -1,33 +1,33 @@
 export const UP = { x: 0, y: 1, z: 0 };
 
-export function createDie(THREE) {
-  const group = new THREE.Group();
+export function createDie(GFX) {
+  const group = new GFX.Group();
   group.name = 'nat_character';
 
-  const body = new THREE.Group();
+  const body = new GFX.Group();
   body.name = 'body';
   group.add(body);
 
-  const dieGeo = new THREE.IcosahedronGeometry(1, 0);
+  const dieGeo = new GFX.IcosahedronGeometry(1, 0);
   dieGeo.computeVertexNormals();
 
-  const dieMat = new THREE.MeshPhysicalMaterial({
+  const dieMat = new GFX.MeshPhysicalMaterial({
     name: 'resin',
-    color: new THREE.Color('#3a3350'),
+    color: new GFX.Color('#3a3350'),
     roughness: 0.28,
     metalness: 0,
     clearcoat: 0.9,
     clearcoatRoughness: 0.14,
     flatShading: true,
   });
-  const die = new THREE.Mesh(dieGeo, dieMat);
+  const die = new GFX.Mesh(dieGeo, dieMat);
   die.name = 'die';
   body.add(die);
 
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.004, 0), 1),
-    new THREE.LineBasicMaterial({
-      color: new THREE.Color('#8d80b8'), transparent: true, opacity: 0.55,
+  const edges = new GFX.LineSegments(
+    new GFX.EdgesGeometry(new GFX.IcosahedronGeometry(1.004, 0), 1),
+    new GFX.LineBasicMaterial({
+      color: new GFX.Color('#8d80b8'), transparent: true, opacity: 0.55,
     }));
   edges.name = 'edge_ink';
   body.add(edges);
@@ -35,10 +35,10 @@ export function createDie(THREE) {
   const faces = [];
   {
     const p = dieGeo.attributes.position;
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const a = new GFX.Vector3(), b = new GFX.Vector3(), c = new GFX.Vector3();
     for (let i = 0; i < p.count; i += 3) {
       a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
-      const centroid = new THREE.Vector3().add(a).add(b).add(c).divideScalar(3);
+      const centroid = new GFX.Vector3().add(a).add(b).add(c).divideScalar(3);
       faces.push({ centroid, normal: centroid.clone().normalize() });
     }
   }
@@ -71,30 +71,30 @@ export function createDie(THREE) {
     g.textBaseline = 'middle';
     g.fillText(String(n), s / 2, s / 2 + 6);
     if (n === 6 || n === 9) g.fillRect(s / 2 - 44, s / 2 + 76, 88, 11);
-    const t = new THREE.CanvasTexture(cv);
-    t.colorSpace = THREE.SRGBColorSpace;
+    const t = new GFX.CanvasTexture(cv);
+    t.colorSpace = GFX.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
   };
 
-  const glyphGeo = new THREE.PlaneGeometry(0.62, 0.62);
-  const upY = new THREE.Vector3(UP.x, UP.y, UP.z);
+  const glyphGeo = new GFX.PlaneGeometry(0.62, 0.62);
+  const upY = new GFX.Vector3(UP.x, UP.y, UP.z);
   faces.forEach((f, i) => {
-    const mat = new THREE.MeshBasicMaterial({
+    const mat = new GFX.MeshBasicMaterial({
       map: glyphTex(numbers[i]),
       transparent: true,
       depthWrite: false,
       toneMapped: false,
     });
     mat.name = 'glyph_' + numbers[i];
-    const q = new THREE.Mesh(glyphGeo, mat);
+    const q = new GFX.Mesh(glyphGeo, mat);
     q.name = 'face_' + numbers[i];
     q.position.copy(f.centroid).multiplyScalar(1.006);
 
-    const ref = Math.abs(f.normal.y) > 0.98 ? new THREE.Vector3(0, 0, 1) : upY;
+    const ref = Math.abs(f.normal.y) > 0.98 ? new GFX.Vector3(0, 0, 1) : upY;
     const upDir = ref.clone().projectOnPlane(f.normal).normalize();
-    const right = new THREE.Vector3().crossVectors(upDir, f.normal).normalize();
-    q.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, upDir, f.normal));
+    const right = new GFX.Vector3().crossVectors(upDir, f.normal).normalize();
+    q.quaternion.setFromRotationMatrix(new GFX.Matrix4().makeBasis(right, upDir, f.normal));
 
     body.add(q);
     f.mesh = q;
