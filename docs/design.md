@@ -222,6 +222,8 @@ tried first, WebGL 2 takes over where it is missing or its device is lost, and
 `?renderer=webgl` pins the fallback. The scene was first written against
 three.js r186, and the engine follows its maths closely enough to draw the same
 picture; `vendor/gfx/LICENSE` says which parts are ported.
+The shaders are plain `.glsl` and `.wgsl` files under `vendor/gfx/shaders/`,
+put together per draw by `glsl.js` and `wgsl.js`.
 
 The camera is the other thing the split changed. The framing is measured against
 everything the die can do, hop included, rather than where it happens to be
